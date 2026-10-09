@@ -1,0 +1,108 @@
+{
+  "name": "nombra",
+  "version": "0.0.0-development",
+  "description": "Name generator from patterns (animal+adjective…) with seeds, gender agreement and Spanish and English word lists. Basic and full builds.",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./types/index.d.ts",
+  "bin": {
+    "nombra": "./bin/nombra.js"
+  },
+  "release": {
+    "branches": [
+      "main"
+    ],
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      [
+        "@semantic-release/npm",
+        {
+          "npmPublish": false
+        }
+      ],
+      [
+        "@semantic-release/exec",
+        {
+          "prepareCmd": "npm run build:dist"
+        }
+      ],
+      [
+        "@semantic-release/github",
+        {
+          "assets": [
+            {
+              "path": "dist/nombra.min.js"
+            },
+            {
+              "path": "dist/nombra.esm.min.js"
+            },
+            {
+              "path": "dist/nombra.full.min.js"
+            },
+            {
+              "path": "dist/nombra.full.esm.min.js"
+            }
+          ]
+        }
+      ]
+    ]
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./full": {
+      "types": "./types/full.d.ts",
+      "default": "./src/full.js"
+    },
+    "./core": {
+      "types": "./types/index.d.ts",
+      "default": "./src/core.js"
+    },
+    "./locales/*": {
+      "types": "./types/index.d.ts",
+      "default": "./src/locales/*.js"
+    },
+    "./dist/*": "./dist/*",
+    "./package.json": "./package.json"
+  },
+  "unpkg": "./dist/nombra.min.js",
+  "jsdelivr": "./dist/nombra.min.js",
+  "files": [
+    "bin",
+    "dist/nombra.min.js",
+    "dist/nombra.esm.min.js",
+    "dist/nombra.full.min.js",
+    "dist/nombra.full.esm.min.js",
+    "src",
+    "types",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "test": "node --test",
+    "build:dist": "node scripts/build-dist.mjs",
+    "prepublishOnly": "npm test && npm run build:dist"
+  },
+  "devDependencies": {
+    "@semantic-release/exec": "^7.1.0",
+    "esbuild": "^0.25.0",
+    "semantic-release": "^24.2.9"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "name-generator",
+    "random-names",
+    "slug",
+    "spanish",
+    "english",
+    "seeded",
+    "cli"
+  ],
+  "license": "MIT"
+}

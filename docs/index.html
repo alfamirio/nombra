@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nombra</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=DM+Mono:wght@400;500&family=Hanken+Grotesk:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky top bar (language, edition, reset); three columns: patterns | options, results and CLI command | reference. */
+:root {
+  --page: 100rem;
+  --bg: #ecf0ee;
+  --surface: #f8faf9;
+  --ink: #12201e;
+  --muted: #526b66;
+  --line: #c9d5d1;
+  --accent: #0e6b7e;
+  --accent-ink: #ffffff;
+  --mark: #d9eef2;
+  --warn: #a3341f;
+  --danger: #c62828;
+  --font-display: 'Bricolage Grotesque', 'Hanken Grotesk', system-ui, sans-serif;
+  --font-body: 'Hanken Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'DM Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1817;
+    --surface: #15221f;
+    --ink: #e3eeeb;
+    --muted: #8fa8a2;
+    --line: #274039;
+    --accent: #5cc3d6;
+    --accent-ink: #04262d;
+    --mark: #17363d;
+    --warn: #ff8a73;
+    --danger: #ff6b6b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1817;
+  --surface: #15221f;
+  --ink: #e3eeeb;
+  --muted: #8fa8a2;
+  --line: #274039;
+  --accent: #5cc3d6;
+  --accent-ink: #04262d;
+  --mark: #17363d;
+  --warn: #ff8a73;
+  --danger: #ff6b6b;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 1rem/1.5 var(--font-body);
+  -webkit-text-size-adjust: 100%;
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Sticky top bar */
+.topbar { position: sticky; top: 0; z-index: 10; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar-in { max-width: var(--page); margin-inline: auto; padding: 0.5rem 1rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; }
+.brand { font: 700 1.15rem/1 var(--font-display); letter-spacing: -0.01em; margin-inline-end: auto; }
+.bar-field { display: inline-flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.bar-label { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+.topbar select { width: auto; padding: 0.35rem 0.5rem; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 0.35rem; overflow: hidden; background: var(--bg); }
+.seg label { position: relative; padding: 0.35rem 0.8rem; cursor: pointer; font-size: 0.9rem; font-weight: 500; }
+.seg label + label { border-inline-start: 1px solid var(--line); }
+.seg input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.seg label:has(input:checked) { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.topbar .btn.danger { padding: 0.35rem 0.55rem; }
+
+.page { max-width: var(--page); margin-inline: auto; padding-inline: 1rem; padding-block: 1.75rem 3rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+.stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; min-width: 0; }
+
+header { display: grid; gap: 0.25rem; }
+h1 { margin: 0; font: 700 clamp(1.9rem, 5vw, 2.6rem)/1.05 var(--font-display); letter-spacing: -0.02em; }
+.lead { margin: 0; color: var(--muted); max-width: 40rem; text-wrap: balance; }
+
+.grid { display: grid; grid-template-columns: minmax(0, clamp(19rem, 25%, 26rem)) minmax(0, 1fr) minmax(0, clamp(21rem, 28%, 32rem)); gap: 1.5rem; align-items: start; }
+/* Reference tables: stacked in the narrow third column. */
+.ref { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+/* Narrower: reference moves under the other two columns; narrower still: one column. */
+@media (max-width: 72rem) {
+  .grid { grid-template-columns: minmax(0, 21rem) minmax(0, 1fr); }
+  .grid > .ref-panel { grid-column: 1 / -1; }
+  .ref { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 52rem) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .ref { grid-template-columns: minmax(0, 1fr); }
+}
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 0.5rem; padding: 1rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; min-width: 0; }
+h2 { margin: 0; font: 600 0.75rem/1.2 var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+/* Patterns */
+fieldset { margin: 0; padding: 0; border: 0; min-width: 0; display: grid; gap: 0.25rem; }
+.preset { position: relative; }
+.preset input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.preset label { display: grid; gap: 0.1rem; padding: 0.5rem 0.65rem; border-radius: 0.35rem; border: 1px solid transparent; cursor: pointer; }
+.preset .id { font: 500 0.9rem/1.3 var(--font-mono); }
+.preset .ex { color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
+.preset input:checked + label { background: var(--mark); border-color: var(--accent); }
+.preset input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+.preset label:hover { border-color: var(--line); }
+
+.field { display: grid; gap: 0.3rem; min-width: 0; }
+.field > span, .field > label { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+input[type="text"], input[type="number"], select {
+  width: 100%; min-width: 0; padding: 0.5rem 0.6rem; background: var(--bg);
+  border: 1px solid var(--line); border-radius: 0.35rem;
+}
+input[type="text"].mono, .mono { font-family: var(--font-mono); font-size: 0.9rem; }
+input:invalid { border-color: var(--warn); }
+.hint { margin: 0; color: var(--muted); font-size: 0.8rem; }
+
+/* Options */
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+.options .wide { grid-column: 1 / -1; }
+.seedrow { display: flex; gap: 0.4rem; }
+.seedrow input { flex: 1; }
+.checks { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; }
+.checks label { display: inline-flex; gap: 0.45rem; align-items: center; cursor: pointer; }
+.checks input { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); }
+.actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-inline-start: auto; }
+
+.btn {
+  padding: 0.5rem 0.9rem; border-radius: 0.35rem; border: 1px solid var(--line);
+  background: var(--surface); cursor: pointer; font-weight: 500;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.small { padding: 0.3rem 0.65rem; font-size: 0.85rem; }
+.btn.danger { display: inline-flex; align-items: center; justify-content: center; padding: 0.5rem 0.6rem; color: var(--danger); border-color: var(--danger); }
+.btn.danger:hover { background: var(--danger); color: #fff; }
+.btn.danger svg { width: 1.15rem; height: 1.15rem; display: block; }
+
+/* Results */
+.results-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.cap { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.error { margin: 0; padding: 0.6rem 0.75rem; border: 1px solid var(--warn); border-radius: 0.35rem; color: var(--warn); font-size: 0.9rem; }
+ol.names { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr)); gap: 0 1.5rem; }
+ol.names li { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding-block: 0.55rem; border-bottom: 1px solid var(--line); min-width: 0; }
+.name { font: 500 1.2rem/1.3 var(--font-mono); overflow-wrap: anywhere; min-width: 0; }
+.copy { flex: none; padding: 0.2rem 0.55rem; font-size: 0.8rem; border: 1px solid var(--line); border-radius: 0.3rem; background: transparent; cursor: pointer; color: var(--muted); }
+.copy:hover { color: var(--ink); border-color: var(--accent); }
+.empty { color: var(--muted); margin: 0; }
+.result-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:disabled:hover { border-color: var(--line); }
+
+/* Every single-column grid fits the available width instead of growing with its content. */
+.cli, .field, fieldset, header, .preset label { grid-template-columns: minmax(0, 1fr); }
+.cli { display: grid; gap: 0.4rem; }
+.cmd { display: flex; gap: 0.5rem; align-items: stretch; }
+.cmd code { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; padding: 0.55rem 0.7rem; background: var(--bg); border: 1px solid var(--line); border-radius: 0.35rem; font: 400 0.88rem/1.4 var(--font-mono); }
+
+/* Reference */
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th { text-align: left; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+th, td { padding: 0.4rem 0.6rem 0.4rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; padding-inline-end: 0; }
+code.t { font: 400 0.85rem/1.4 var(--font-mono); background: var(--mark); padding: 0.05rem 0.35rem; border-radius: 0.25rem; white-space: nowrap; }
+.tags { color: var(--muted); font: 400 0.8rem/1.4 var(--font-mono); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn, .copy, .preset label, .seg label { transition: border-color 0.15s, background-color 0.15s, color 0.15s; }
+}
+</style>
+</head>
+<body>
+<nav class="topbar" aria-label="Settings">
+  <div class="topbar-in">
+    <span class="brand">Nombra</span>
+    <div class="bar-field">
+      <label class="bar-label" for="locale">Language</label>
+      <select id="locale"></select>
+    </div>
+    <div class="bar-field">
+      <span class="bar-label" id="edition-label">Edition</span>
+      <div class="seg" role="radiogroup" aria-labelledby="edition-label" title="Basic: animal, adjective, thing, color. Full adds city, country, fruit and plant.">
+        <label><input type="radio" name="edition" value="basic"> Basic</label>
+        <label><input type="radio" name="edition" value="full" checked> Full</label>
+      </div>
+    </div>
+    <button id="reset" class="btn danger" type="button" title="Delete saved settings" aria-label="Delete saved settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+    </button>
+  </div>
+</nav>
+<div class="page">
+  <header>
+    <h1>Nombra</h1>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="h-patron">
+      <h2 id="h-patron">Pattern</h2>
+      <fieldset id="presets" aria-label="Available patterns"></fieldset>
+      <div class="field">
+        <label for="template">Template</label>
+        <input id="template" class="mono" type="text" spellcheck="false" autocomplete="off" autocapitalize="off">
+        <p class="hint">Edit it to build your own pattern. The syntax is explained in the Reference panel.</p>
+      </div>
+    </section>
+
+    <div class="stack">
+      <section class="panel" aria-labelledby="h-opc">
+        <h2 id="h-opc">Options</h2>
+        <div class="options">
+          <div class="field">
+            <label for="count">Count</label>
+            <input id="count" type="number" min="1" max="60" value="8" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label for="format">Format</label>
+            <select id="format"></select>
+          </div>
+          <div class="field wide">
+            <label for="seed">Seed</label>
+            <div class="seedrow">
+              <input id="seed" class="mono" type="text" spellcheck="false" autocomplete="off" placeholder="random">
+              <button id="newseed" class="btn small" type="button" title="Set a new seed">New</button>
+            </div>
+          </div>
+        </div>
+        <div class="checks">
+          <label><input id="alliterate" type="checkbox"> Alliteration</label>
+          <label><input id="unique" type="checkbox"> Unique</label>
+          <label title="Keep accents (á, ñ…). Off: plain ASCII"><input id="ascii" type="checkbox"> ascii-extended</label>
+          <div class="actions">
+            <button id="generate" class="btn primary" type="button">Generate</button>
+          </div>
+        </div>
+        <p class="hint" id="seedhint">Without a seed every click gives different names. With a seed the result is always the same. Your settings are saved in this browser; the red bin in the top bar deletes them.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-res">
+        <div class="results-head">
+          <h2 id="h-res">Names</h2>
+          <span class="cap" id="cap"></span>
+        </div>
+        <p class="error" id="error" role="alert" hidden></p>
+        <ol class="names" id="names" aria-live="polite"></ol>
+        <div class="result-actions">
+          <button id="copyall" class="btn small" type="button">Copy all</button>
+          <button id="csv" class="btn small" type="button" title="Download the names as a CSV file with one column">Download CSV</button>
+        </div>
+        <div class="cli">
+          <h2>In the terminal</h2>
+          <div class="cmd">
+            <code id="cmd" tabindex="0"></code>
+            <button id="copycmd" class="btn small" type="button">Copy</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel ref-panel" aria-labelledby="h-ref">
+      <h2 id="h-ref">Reference</h2>
+      <div class="ref">
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Syntax</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td><code class="t">{animal}</code></td><td>A random word from the <span class="mono">animal</span> dictionary</td></tr>
+              <tr><td><code class="t">{animal#marine}</code></td><td>Only entries with that tag</td></tr>
+              <tr><td><code class="t">{adjective@animal}</code></td><td>Adjective that agrees with the <span class="mono">{animal}</span> part (Spanish)</td></tr>
+              <tr><td><code class="t">{num:6}</code></td><td>6-digit number, no leading zero</td></tr>
+              <tr><td><code class="t">{hex:4}</code></td><td>4 hexadecimal characters</td></tr>
+              <tr><td><code class="t">{pseudo:3}</code></td><td>Made-up word of 3 syllables</td></tr>
+              <tr><td><code class="t">of</code></td><td>Literal text</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Dictionary</th><th>Type</th><th class="num">Words</th></tr></thead>
+            <tbody id="dicts"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Published site: nombra.full.min.js is the file attached to the latest GitHub release (the Pages job
+     in .github/workflows/ci.yml copies it next to this page). Local copy: falls back to dist/. -->
+<script src="nombra.full.min.js"></script>
+<script>window.Nombra || document.write('<script src="../dist/nombra.full.min.js"><\/script>');</script>
+<script>
+// Demo logic. Uses the packaged library (global `Nombra` from nombra.full.min.js: the latest GitHub release
+// when published, or ../dist/nombra.full.min.js built with `npm run build:dist` when run locally).
+
+if (!window.Nombra) {
+  const box = document.getElementById('error');
+  box.textContent = 'Could not load nombra.full.min.js. Locally: run "npm run build:dist" and open the page over http (see README). Published: check that docs/nombra.full.min.js exists on main.';
+  box.hidden = false;
+  throw new Error('nombra.full.min.js not found');
+}
+
+const { createGenerator, locales, FORMATS } = Nombra;
+
+const DEFAULT_LOCALE = 'en';
+const LOCALE_NAMES = { en: 'English', es: 'Español' };
+
+// Two editions, like the two npm builds: `full` is the library as bundled; `basic` is the same packs
+// reduced to what `nombra` ships (animal, adjective, thing, color and the presets that only use them).
+// Same seed, same names in both (the test suite checks it against the real basic build).
+const EDITIONS = ['basic', 'full'];
+const DEFAULT_EDITION = 'full';
+const BASIC_DICTIONARIES = ['animal', 'adjective', 'thing', 'color'];
+const BUILTIN_PARTS = ['num', 'hex', 'pseudo'];
+
+function basicPack(pack) {
+  const dictionaries = pack.dictionaries.filter((d) => BASIC_DICTIONARIES.includes(d.name));
+  const known = [...BASIC_DICTIONARIES, ...BUILTIN_PARTS];
+  const presets = Object.fromEntries(
+    Object.entries(pack.presets).filter(([, p]) => [...p.template.matchAll(/\{(\w+)/g)].every((m) => known.includes(m[1]))),
+  );
+  return { dictionaries, presets };
+}
+
+const packs = {
+  full: locales,
+  basic: Object.fromEntries(Object.entries(locales).map(([id, pack]) => [id, basicPack(pack)])),
+};
+const generators = Object.fromEntries(
+  EDITIONS.map((edition) => [
+    edition,
+    Object.fromEntries(
+      Object.entries(packs[edition]).map(([id, pack]) => [
+        id,
+        createGenerator({ locale: null, dictionaries: pack.dictionaries, patterns: pack.presets }),
+      ]),
+    ),
+  ]),
+);
+const $ = (id) => document.getElementById(id);
+
+const FORMAT_EXAMPLES = {
+  kebab: 'calm-fox',
+  snake: 'calm_fox',
+  camel: 'calmFox',
+  pascal: 'CalmFox',
+  title: 'Calm Fox',
+  space: 'calm fox',
+};
+const TYPE_LABELS = { noun: 'noun', adjective: 'adjective', plain: 'plain' };
+const CUSTOM = '__custom__';
+
+const el = {
+  presets: $('presets'),
+  locale: $('locale'),
+  editions: document.querySelectorAll('input[name="edition"]'),
+  template: $('template'),
+  count: $('count'),
+  format: $('format'),
+  ascii: $('ascii'),
+  seed: $('seed'),
+  alliterate: $('alliterate'),
+  unique: $('unique'),
+  names: $('names'),
+  error: $('error'),
+  cap: $('cap'),
+  cmd: $('cmd'),
+  dicts: $('dicts'),
+};
+
+let current = [];
+let locale = DEFAULT_LOCALE;
+let edition = DEFAULT_EDITION;
+const presets = () => packs[edition][locale].presets;
+const generatorNow = () => generators[edition][locale];
+const syncEdition = () => el.editions.forEach((radio) => { radio.checked = radio.value === edition; });
+
+// ------------------------------------------------------------------ setup
+
+function buildPresets() {
+  el.presets.replaceChildren();
+  const entries = [...Object.entries(presets()), [CUSTOM, { template: '', description: 'Type the template in the field below' }]];
+  for (const [id, preset] of entries) {
+    const row = document.createElement('div');
+    row.className = 'preset';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'preset';
+    input.id = `preset-${id}`;
+    input.value = id;
+    const label = document.createElement('label');
+    label.htmlFor = input.id;
+    const title = document.createElement('span');
+    title.className = 'id';
+    title.textContent = id === CUSTOM ? 'custom template' : id;
+    const example = document.createElement('span');
+    example.className = 'ex';
+    example.textContent = preset.description;
+    label.append(title, example);
+    row.append(input, label);
+    el.presets.append(row);
+  }
+}
+
+function buildLocales() {
+  for (const id of Object.keys(locales)) {
+    const option = document.createElement('option');
+    option.value = id;
+    option.textContent = LOCALE_NAMES[id] ?? id;
+    el.locale.append(option);
+  }
+}
+
+function buildFormats() {
+  for (const format of FORMATS) {
+    const option = document.createElement('option');
+    option.value = format;
+    option.textContent = `${format} · ${FORMAT_EXAMPLES[format]}`;
+    el.format.append(option);
+  }
+}
+
+function buildDictionaries() {
+  el.dicts.replaceChildren();
+  for (const dict of packs[edition][locale].dictionaries) {
+    const tags = [...new Set(dict.entries.flatMap((entry) => entry.tags))];
+    const row = document.createElement('tr');
+    const name = document.createElement('td');
+    const code = document.createElement('code');
+    code.className = 't';
+    code.textContent = dict.name;
+    name.append(code);
+    if (tags.length) {
+      const list = document.createElement('div');
+      list.className = 'tags';
+      list.textContent = tags.map((tag) => `#${tag}`).join(' ');
+      name.append(list);
+    }
+    const type = document.createElement('td');
+    type.textContent = TYPE_LABELS[dict.type];
+    const size = document.createElement('td');
+    size.className = 'num';
+    size.textContent = dict.entries.length;
+    row.append(name, type, size);
+    el.dicts.append(row);
+  }
+}
+
+// ---------------------------------------------------------------- helpers
+
+function presetIdFor(template) {
+  return Object.keys(presets()).find((id) => presets()[id].template === template);
+}
+
+function syncRadio() {
+  const wanted = presetIdFor(el.template.value.trim()) ?? CUSTOM;
+  const radio = document.querySelector(`input[name="preset"][value="${CSS.escape(wanted)}"]`);
+  if (radio) radio.checked = true;
+}
+
+function shellQuote(text) {
+  return /^[\w.-]+$/.test(text) ? text : `'${text.replace(/'/g, `'\\''`)}'`;
+}
+
+function options() {
+  const opts = { format: el.format.value, alliterate: el.alliterate.checked, unique: el.unique.checked };
+  if (el.ascii.checked) opts.asciiExtended = true;
+  const seed = el.seed.value.trim();
+  if (seed) opts.seed = seed;
+  return opts;
+}
+
+function readCount() {
+  const n = Math.round(Number(el.count.value));
+  return Number.isFinite(n) ? Math.min(60, Math.max(1, n)) : 8;
+}
+
+function cliCommand(template, count, opts) {
+  const parts = ['npx nombra'];
+  parts.push(presetIdFor(template) ?? shellQuote(template));
+  if (locale !== DEFAULT_LOCALE) parts.push('-L', locale);
+  if (count !== 1) parts.push('-n', String(count));
+  if (opts.seed) parts.push('--seed', shellQuote(opts.seed));
+  if (opts.format !== 'kebab') parts.push('-f', opts.format);
+  if (opts.alliterate) parts.push('-a');
+  if (opts.unique) parts.push('-u');
+  if (opts.asciiExtended) parts.push('--ascii-extended');
+  return parts.join(' ');
+}
+
+// ------------------------------------------------------------------ storage
+// Settings live in localStorage so they are restored on the next visit. Every access is wrapped:
+// storage can be blocked (private windows, blocked site data) and the page must still work.
+
+const STORAGE_KEY = 'nombra-demo:v1';
+
+function loadSettings() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSettings() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      locale,
+      edition,
+      template: el.template.value,
+      count: el.count.value,
+      format: el.format.value,
+      seed: el.seed.value,
+      alliterate: el.alliterate.checked,
+      unique: el.unique.checked,
+      ascii: el.ascii.checked,
+    }));
+  } catch {
+    // Nothing to do: the demo just will not remember the settings.
+  }
+}
+
+function clearSettings() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Same as above.
+  }
+}
+
+/** Applies saved settings to the controls, ignoring anything that is no longer valid. */
+function applySettings(saved) {
+  if (typeof saved.template === 'string' && saved.template.trim()) el.template.value = saved.template;
+  if (FORMATS.includes(saved.format)) el.format.value = saved.format;
+  const count = Number(saved.count);
+  if (Number.isFinite(count) && count >= 1) el.count.value = String(Math.min(60, Math.round(count)));
+  el.seed.value = typeof saved.seed === 'string' ? saved.seed : '';
+  el.alliterate.checked = saved.alliterate === true;
+  el.unique.checked = saved.unique === true;
+  el.ascii.checked = saved.ascii === true;
+  syncRadio();
+}
+
+/** Back to the defaults: first language, full edition, first pattern, 8 names, no options. */
+function resetSettings() {
+  locale = DEFAULT_LOCALE;
+  edition = DEFAULT_EDITION;
+  el.locale.value = locale;
+  syncEdition();
+  setLocale();
+  el.count.value = '8';
+  el.format.value = 'kebab';
+  el.seed.value = '';
+  el.alliterate.checked = false;
+  el.unique.checked = false;
+  el.ascii.checked = false;
+  generate();
+  clearSettings(); // generate() saves the defaults; the reset wants nothing stored
+}
+
+// ----------------------------------------------------------------- generation
+
+function render(names) {
+  current = names;
+  $('copyall').disabled = $('csv').disabled = names.length === 0;
+  el.names.replaceChildren(
+    ...names.map((name) => {
+      const li = document.createElement('li');
+      const text = document.createElement('span');
+      text.className = 'name';
+      text.textContent = name;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'copy';
+      button.textContent = 'Copy';
+      button.dataset.copy = name;
+      button.setAttribute('aria-label', `Copy ${name}`);
+      li.append(text, button);
+      return li;
+    }),
+  );
+}
+
+function generate() {
+  const template = el.template.value.trim();
+  const count = readCount();
+  const opts = options();
+  el.error.hidden = true;
+  el.cap.textContent = '';
+
+  if (!template) {
+    render([]);
+    el.error.textContent = 'Pick a pattern or type a template, for example {adjective} {animal}.';
+    el.error.hidden = false;
+    el.cmd.textContent = '';
+    saveSettings();
+    return;
+  }
+
+  try {
+    render(generatorNow().generateMany(template, count, opts));
+    el.cmd.textContent = cliCommand(template, count, opts);
+  } catch (error) {
+    render([]);
+    el.cmd.textContent = '';
+    el.error.textContent = error.message;
+    el.error.hidden = false;
+  }
+
+  try {
+    const total = generatorNow().capacity(template, { alliterate: opts.alliterate });
+    el.cap.textContent = `${total.toLocaleString('en-US')} combinations`;
+  } catch {
+    el.cap.textContent = '';
+  }
+  saveSettings();
+}
+
+// ---------------------------------------------------------------------- copy
+
+async function copyText(text, button, doneLabel = 'Copied') {
+  const original = button.textContent;
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch {
+    // Some viewers block the clipboard: select the text so it can be copied by hand.
+    const target = button.closest('li')?.querySelector('.name') ?? (button.id === 'copycmd' ? el.cmd : null);
+    if (target) {
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  }
+  button.textContent = ok ? doneLabel : 'Select and copy';
+  setTimeout(() => {
+    button.textContent = original;
+  }, 1400);
+}
+
+// ----------------------------------------------------------------------- CSV
+
+/** One column, header "name". RFC 4180 quoting; BOM so Excel reads accents (ascii-extended) as UTF-8. */
+function toCsv(names) {
+  const cell = (value) => (/[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
+  return `\uFEFF${['name', ...names].map(cell).join('\r\n')}\r\n`;
+}
+
+function downloadCsv() {
+  if (!current.length) return;
+  const preset = presetIdFor(el.template.value.trim());
+  const base = (preset ?? 'names').replace(/[^\w-]+/g, '-');
+  const blob = new Blob([toCsv(current)], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `nombra-${base}-${locale}.csv`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ----------------------------------------------------------------------- events
+
+el.presets.addEventListener('change', (event) => {
+  const id = event.target.value;
+  if (id === CUSTOM) {
+    el.template.focus();
+    return;
+  }
+  el.template.value = presets()[id].template;
+  el.alliterate.checked = Boolean(presets()[id].alliterate);
+  generate();
+});
+
+el.template.addEventListener('input', () => {
+  syncRadio();
+  generate();
+});
+
+for (const control of [el.count, el.format, el.ascii, el.alliterate, el.unique]) {
+  control.addEventListener('change', () => {
+    if (control === el.alliterate) syncRadio();
+    generate();
+  });
+}
+el.count.addEventListener('input', generate);
+el.seed.addEventListener('input', generate);
+
+/**
+ * Changes language or edition. Same keywords everywhere: a custom template is kept, a preset becomes
+ * its counterpart, and a preset that does not exist in the new edition falls back to the first one.
+ */
+function changePack(apply) {
+  const template = el.template.value;
+  const presetId = presetIdFor(template.trim());
+  apply();
+  setLocale();
+  if (presetId && presets()[presetId]) {
+    el.template.value = presets()[presetId].template;
+    el.alliterate.checked = Boolean(presets()[presetId].alliterate);
+  } else if (!presetId && template.trim()) {
+    el.template.value = template;
+  }
+  syncRadio();
+  generate();
+}
+
+el.locale.addEventListener('change', () => changePack(() => { locale = el.locale.value; }));
+for (const radio of el.editions) {
+  radio.addEventListener('change', () => {
+    if (radio.checked) changePack(() => { edition = radio.value; });
+  });
+}
+
+$('generate').addEventListener('click', generate);
+$('reset').addEventListener('click', resetSettings);
+$('newseed').addEventListener('click', () => {
+  el.seed.value = Math.random().toString(36).slice(2, 6);
+  generate();
+});
+
+el.names.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-copy]');
+  if (button) copyText(button.dataset.copy, button);
+});
+$('copyall').addEventListener('click', (event) => {
+  if (current.length) copyText(current.join('\n'), event.currentTarget);
+});
+$('csv').addEventListener('click', downloadCsv);
+$('copycmd').addEventListener('click', (event) => {
+  if (el.cmd.textContent) copyText(el.cmd.textContent, event.currentTarget);
+});
+
+// ---------------------------------------------------------------------- start
+
+function setLocale() {
+  buildPresets();
+  buildDictionaries();
+  el.template.value = Object.values(presets())[0].template;
+  el.alliterate.checked = false;
+  syncRadio();
+}
+
+const saved = loadSettings();
+buildLocales();
+buildFormats();
+if (saved && Object.hasOwn(locales, saved.locale)) locale = saved.locale;
+if (saved && EDITIONS.includes(saved.edition)) edition = saved.edition;
+el.locale.value = locale;
+syncEdition();
+setLocale();
+if (saved) applySettings(saved);
+generate();
+</script>
+</body>
+</html>

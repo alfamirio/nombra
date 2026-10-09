@@ -1,0 +1,181 @@
+name: CI
+
+# - Every pull request and every push to main: tests on Node 22.
+# - Every push to main, once the tests pass: semantic-release reads the commit messages
+#   (fix: → patch, feat: → minor, feat!: / BREAKING CHANGE → major; anything else → no release),
+#   tags and creates the GitHub release with the bundles attached. It never touches npm.
+# - Then a separate step tries to publish that version to npm. If it fails (no NPM_TOKEN yet,
+#   expired token, version already published…) the job only shows a warning: the GitHub release stays.
+#   Needs the NPM_TOKEN secret (npm granular access token, read and write) for that step.
+# - After a successful npm publish, every older version is deprecated on npm (npm does not allow
+#   deleting versions in general, so deprecating is the closest thing).
+# - The `cleanup` job keeps only the latest GitHub release and deletes the older ones with their tags.
+# - The `pages` job builds the demo site (docs/index.html + nombra.full.min.js from that release) and
+#   deploys it with GitHub Pages. Nothing is committed to the repository.
+#   Needs Settings → Pages → Source: "GitHub Actions".
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:dist
+
+  release:
+    if: github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # tags and GitHub release
+      issues: write
+      pull-requests: write
+      id-token: write       # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # semantic-release needs the tags and the history
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22  # semantic-release needs Node >= 20.8
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      # Makes `git push --force` safe: a version tag that is no longer reachable from HEAD (history was
+      # rewritten) would make semantic-release fail with "tag already exists". Delete those orphan tags
+      # and their GitHub releases so semantic-release can create the same version again.
+      - name: Remove tags and releases orphaned by a force push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for tag in $(git tag -l 'v[0-9]*.[0-9]*.[0-9]*'); do
+            if ! git merge-base --is-ancestor "$tag" HEAD; then
+              echo "Orphan tag $tag: removing its release and tag"
+              gh release delete "$tag" --cleanup-tag --yes || git push origin ":refs/tags/$tag" || true
+              git tag -d "$tag" || true
+            fi
+          done
+
+      # GitHub only: tag, release notes and the two bundles (built in the `prepare` step with the new version).
+      - run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # npm, best effort. Runs only if this commit now carries a release tag, and takes the version from
+      # that tag, so re-running the job after fixing the token publishes the existing release to npm.
+      - name: Publish to npm
+        id: npm
+        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+        run: |
+          tag="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          if [ -z "$tag" ]; then
+            echo "No release on this commit: nothing to publish to npm."
+            exit 0
+          fi
+          npm version "${tag#v}" --no-git-tag-version --allow-same-version
+          npm publish --access public   # `prepublishOnly` runs the tests and the build again
+
+      - name: npm publish failed (the GitHub release is not affected)
+        if: steps.npm.outcome == 'failure'
+        run: echo "::warning::npm publish failed. Check the NPM_TOKEN secret and re-run this job; the GitHub release already exists."
+
+      # npm cannot delete old versions (unpublish is restricted), so deprecate everything older than
+      # the version just released. Best effort: a failure here only shows a warning.
+      - name: Deprecate older versions on npm
+        if: steps.npm.outcome == 'success'
+        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          tag="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          if [ -z "$tag" ]; then
+            echo "No release on this commit: nothing to deprecate."
+            exit 0
+          fi
+          version="${tag#v}"
+          npm deprecate "nombra@<${version}" "Old version. Please upgrade to ${version} or later."
+
+  # Keeps only the latest GitHub release. Older releases are deleted together with their git tags.
+  # semantic-release only needs the tag of the latest release to compute the next version,
+  # and the `pages` job always downloads nombra.full.min.js from the latest release.
+  cleanup:
+    if: github.event_name == 'push'
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # delete releases and tags
+    steps:
+      - name: Delete older releases (keep last 1)
+        uses: dev-drprasad/delete-older-releases@v0.3.4
+        with:
+          keep_latest: 1
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Demo site on GitHub Pages (Settings → Pages → Source: "GitHub Actions").
+  # The site is assembled in _site/: docs/index.html plus nombra.full.min.js. Prefers the bundle attached to
+  # the latest release; if there is none (release failed or nothing released yet) it builds the same
+  # bundle from this commit. Nothing is committed to the repository.
+  pages:
+    needs: [release, cleanup]
+    if: ${{ !cancelled() && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read        # checkout and download the release asset
+      pages: write          # deploy to Pages
+      id-token: write       # Pages verifies the deployment origin
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Assemble the site (index.html + nombra.full.min.js)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir _site
+          cp docs/index.html _site/
+          if ! gh release download --repo "$GITHUB_REPOSITORY" --pattern nombra.full.min.js --dir _site --clobber; then
+            echo "::warning::No release with nombra.full.min.js; building it from this commit instead."
+            npm ci
+            npm run build:dist
+            cp dist/nombra.full.min.js _site/nombra.full.min.js
+          fi
+          test -s _site/nombra.full.min.js
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
